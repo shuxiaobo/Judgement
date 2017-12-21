@@ -1,0 +1,7 @@
+# Created by .ignore support plugin (hsz.mobi)
+.ipynb_checkpoints/*
+.idea/*
+data/plain/*
+*/__pycache__/*
+__pycache__/*
+*.iml
