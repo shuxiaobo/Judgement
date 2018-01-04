@@ -5,3 +5,7 @@ data/plain/*
 */__pycache__/*
 __pycache__/*
 *.iml
+.DS_Store
+.gitignore
+data/*
+data/precessed*

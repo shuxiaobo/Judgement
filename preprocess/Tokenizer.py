@@ -71,6 +71,8 @@ class Tokens(object):
     def make_pair(self):
         """Make pair between word ,ner ,pos. return list [[word, ner, pos]...]
         Split each to sentence by '。'
+
+        rebuild , -> 空格 -> \t
         """
         if 'ner' not in self.annotators or 'pos' not in self.annotators:
             return None
@@ -78,12 +80,12 @@ class Tokens(object):
         sen = []
         for d in self.data:
             if d[self.TEXT] == '。':
-                result.append(sen.copy())
+                result.append(' '.join(sen.copy()))  # join 句子之内
                 sen.clear()
             else:
-                sen.append([d[self.TEXT], d[self.POS], d[self.NER]])
+                sen.append(','.join([d[self.TEXT], d[self.POS], d[self.NER]]))  # join 单词内部
 
-        return result
+        return '\t'.join(result)  # join 句子之间
 
     def ngrams(self, n=1, uncased=False, filter_fn=None, as_strings=True):
         """Returns a list of all ngrams from length 1 to n.

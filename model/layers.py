@@ -34,6 +34,15 @@ class StackRnn(nn.Module):
                 self.rnn_type(in_size, hidden_size=hidden_size, number_layers=1, bidirectional=bidirection))
         self.fc = nn.Linear(hidden_size, output_size)
 
+    def init_weight(self):
+        # nn.init.xavier_uniform(self.embedding.state_dict()['weight'])
+        for rn in self.rnns:
+            for name, param in rn.state_dict().items():
+                if 'weight' in name: nn.init.xavier_normal(param)
+
+        nn.init.xavier_normal(self.fc.state_dict()['weight'])
+        self.fc.bias.data.fill_(0)
+
     def forward(self, x, x_mask):
         '''
         这里第一版2017年12月21日00:57:58
