@@ -1,4 +1,5 @@
 import torch
+from .dataset import Dictionary
 
 USE_CUDA = torch.cuda.is_available()
 

@@ -1,22 +1,33 @@
 import logging
+import time
 from collections import Counter
 
 import gensim
+from torch.autograd import Variable
 
 from util import *
+import torch
+import numpy as np
 
 logger = logging.getLogger(__file__)
-import time
+
+USE_CUDA = torch.cuda.is_available()
+
+FloatTensor = torch.cuda.FloatTensor if USE_CUDA else torch.FloatTensor
+LongTensor = torch.cuda.LongTensor if USE_CUDA else torch.LongTensor
+ByteTensor = torch.cuda.ByteTensor if USE_CUDA else torch.ByteTensor
 
 
-# def index_embedding_words(embedding_file):
-#     """Put all the words in embedding_file into a set."""
-#     words = set()
-#     with open(embedding_file, encoding='utf-8') as f:
-#         for line in f:
-#             w = Dictionary.normalize(line.rstrip().split(' ')[0])
-#             words.add(w)
-#     return words
+def index_embedding_words(embedding_file):
+    """Put all the words in embedding_file into a set."""
+    words = set()
+    with open(embedding_file, encoding='utf-8') as f:
+        for line in f:
+            w = Dictionary.normalize(line.rstrip().split(' ')[0])
+            words.add(w)
+    return words
+
+
 #
 #
 # def load_embedding(filename):
@@ -30,39 +41,40 @@ import time
 #     return word2vec, words2index, index2words
 #
 #
-# # 从embedding file中读取所有的word到一个Set里面
-# def load_words(args, examples):
-#     """Iterate and index all the words in examples (documents + questions)."""
-#
-#     def _insert(iterable):
-#         for w in iterable:
-#             w = Dictionary.normalize(w)
-#             if valid_words and w not in valid_words:
-#                 continue
-#             words.add(w)
-#
-#     if args.restrict_vocab and args.embedding_file:
-#         logger.info('Restricting to words in %s' % args.embedding_file)
-#         valid_words = index_embedding_words(args.embedding_file)
-#         logger.info('Num words in set = %d' % len(valid_words))
-#     else:
-#         valid_words = None
-#
-#     words = set()
-#     for ex in examples:
-#         _insert(ex['question'])
-#         _insert(ex['document'])
-#     return words
-#
-#
-# def build_word_dict(args, examples):
-#     """Return a dictionary from question and document words in
-#     provided examples.
-#     """
-#     word_dict = Dictionary()
-#     for w in load_words(args, examples):
-#         word_dict.add(w)
-#     return word_dict
+# 从embedding file中读取所有的word到一个Set里面
+def load_words(args, examples):
+    """Iterate and index all the words in examples (documents + questions)."""
+
+    def _insert(iterable):
+        for w in iterable:
+            w = Dictionary.normalize(w)
+            if valid_words and w not in valid_words:
+                continue
+            words.add(w)
+
+    if args.restrict_vocab and args.embedding_file:
+        logger.info('Restricting to words in %s' % args.embedding_file)
+        valid_words = index_embedding_words(args.embedding_file)
+        logger.info('Num words in set = %d' % len(valid_words))
+    else:
+        valid_words = None
+
+    words = set()
+    for ex in examples:
+        _insert(ex['question'])
+        _insert(ex['document'])
+    return words
+
+
+def build_word_dict(args, examples):
+    """Return a dictionary from question and document words in
+    provided examples.
+    """
+    word_dict = Dictionary()
+    for w in load_words(args, examples):
+        word_dict.add(w)
+    return word_dict
+
 
 def build_feature_dict(args, examples):
     """Index features (one hot) from fields in examples and options."""
@@ -102,53 +114,55 @@ def load_train_data(filename, word2vec_file):
     words2index = {k: v for v, k in enumerate(word2vec.index2word)}
     data = []
     with open(filename, encoding='utf-8', mode='r') as f:
-        # words = []  # split by 。use the sentences
-        # poss = []
-        # ners = []
-        # fines = []
-        # clauses = []
         wrong_count = 0
         line_count = 0
         wrong = False
         for lines in f:
             lines = [lines.strip(), f.readline().strip(), f.readline().strip(), f.readline().strip()]
 
-            sen = lines[0].strip().split(' ')
+            sen = lines[0].strip().split('\t')
+
+            if len(sen) <= 1:
+                continue
 
             data_dict = {}
             w = []
             p = []
             n = []
+            line_count += 1
             for s in sen:
-                line_count += 1
                 try:
-                    w.append([words2index[w.split(',')[0]] for w in s.split('。')])
-                    n.append([w.split(',')[1] for w in s.split('。')])
-                    p.append([w.split(',')[2] for w in s.split('。')])
+                    w.append([words2index[w.split(',')[0]] for w in s.split(' ')])
+                    if len(w) <= 1:
+                        continue
+                    n.append([w.split(',')[1] for w in s.split(' ')])
+                    p.append([w.split(',')[2] for w in s.split(' ')])
                     wrong = False
                 except:
                     '''直接丢掉整个样例'''
                     wrong = True
                     wrong_count += 1
-                    print("Get some words wrong. %s, wrong_count %d, line %d" % (s.split('。'), wrong_count, line_count))
+                    print("Get some words wrong. %s, wrong_count %d, line %d" % (s.split(' '), wrong_count, line_count))
                     break
 
             if not wrong:
                 data_dict.setdefault('words', w)
                 data_dict.setdefault('ners', n)
                 data_dict.setdefault('poss', p)
-                data_dict.setdefault('fines', [int(lines[1].strip())])
+                data_dict.setdefault('fines', [int(lines[1].strip()) - 1])
                 data_dict.setdefault('clauses', [int(c) for c in lines[2].strip().split(',')])
                 data.append(data_dict)
-
+            if line_count > 1000:
+                break
         # return words, poss, ners, fines, clauses
+
         return data, words2index
 
 
 def collate_batch(batch):
     """
     这里主要是做mask
-    [words, poss, ners, fines, clauses] in one list
+    [words, features fines, clauses] in one batch list
     Gather a batch of individual examples into one batch.
     here will be batch_size * samples * sentences * seq_len
     pad and pack the sample's length
@@ -156,11 +170,11 @@ def collate_batch(batch):
     :return: a list of batch apply Variable
     """
     words = [d[0] for d in batch]  # batch_size * sentences * seq_len
-    features = [d[1] for d in batch]
+    words_features = [d[1] for d in batch]  # batch_size * sentences * seq_len * feature_len
     fines = [d[2] for d in batch]
-    clauses = [d[3] for d in batch]
+    clauses = torch.cat([d[3] for d in batch], 0)
 
-    batch_size = batch.size(0)
+    batch_size = len(batch)  # 这里torch 给的batch 是个list
     lengths = [len(d) for b in words for d in b]  # sentences count for each sample
 
     sentences_count = [len(d) for d in words]
@@ -170,18 +184,23 @@ def collate_batch(batch):
 
     document = torch.LongTensor(batch_size, max_sen_len, max_seq_len).zero_()
     document_mask = torch.ByteTensor(batch_size, max_sen_len, max_seq_len).fill_(1)
-    if features[0] is not None:
-        features = torch.LongTensor(batch_size, max_sen_len, max_seq_len, features[0].size(1)).zero_()
+    if words_features[0] is not None:
+        features = torch.FloatTensor(batch_size, max_sen_len, max_seq_len, words_features[0].size(2)).zero_()
     else:
         features = None
 
-    for i, d in enumerate(words):
-        for j, s in enumerate(d):
+    for i, d in enumerate(words):  # 文章
+        for j, s in enumerate(d):  # 句子
             document[i, j, :s.size(0)].copy_(s)
             document_mask[i, j, :s.size(0)].fill_(0)  # 0 for real
             if features is not None:
-                features[i, j, :s.size(0)].copy_(features[i])
+                features[i, j, :s.size(0), :].copy_(words_features[i][j])
 
+    document = Variable(document).cuda() if USE_CUDA else  Variable(document)
+    document_mask = Variable(document_mask).cuda() if USE_CUDA else  Variable(document_mask)
+    features = Variable(features).cuda() if USE_CUDA else  Variable(features)
+    # fines = Variable(fines).cuda() if USE_CUDA else  Variable(fines)
+    clauses = Variable(clauses).cuda() if USE_CUDA else  Variable(clauses)
     return document, document_mask, features, fines, clauses
 
 
@@ -197,20 +216,24 @@ def vectorize(data, model):
     feature_dict = model.feature_dict
     args = model.args
 
-    sens_len = [d.size(0) for d in data['words']]
-    seq_len = [l.size(0) for d in data['words'] for l in d]
+    sens_len = len(data['words'])
+    seq_len = [len(d) for d in data['words']]
 
     # Create extra features vector
     if len(feature_dict) > 0:
-        features = torch.zeros(max(sens_len), max(seq_len), len(feature_dict))
+        features = torch.zeros(sens_len, max(seq_len), len(feature_dict))  # 注意，直接使用LongTensor，必须要进行初始化，不然默认是有值的，很大且不固定
     else:
         features = None
 
-    document = LongTensor(max(sens_len), max(seq_len))  # 单个样例 sen_num * sen_len, 不用段落，直接句子然后文章
+    document = torch.zeros(sens_len, max(seq_len))  # 单个样例 sen_num * sen_len, 不用段落，直接句子然后文章
+    for i, w in enumerate(data['words']):
+        document[i, :len(w)].copy_(LongTensor(w))
 
-    target_tags = LongTensor(1, len(data['clauses']))
+    target_tags = torch.zeros(1, len(data['clauses']))
+    # for i, t in data['clausea']:
+    #     target_tags[i,:len(t)].copy_(LongTensor(t))
 
-    classify = data['fines']
+    classify = torch.from_numpy(np.asarray(data['fines']))
 
     if args.use_pos:
         for i, d in enumerate(data['poss']):
@@ -234,7 +257,6 @@ def vectorize(data, model):
         for i, d in enumerate(data['poss']):
             for j, w in enumerate(d):
                 features[i][j][feature_dict['tf']] = counter[w.lower()] * 1.0 / l
-
     return document, features, target_tags, classify
 
 
@@ -250,14 +272,16 @@ def build_feature_dict(args, examples):
     # Part of speech tag features
     if args.use_pos:
         for ex in examples:
-            for w in ex['pos']:
-                _insert('pos=%s' % w)
+            for w in ex['poss']:
+                for p in w:
+                    _insert('pos=%s' % p)
 
     # Named entity tag features
     if args.use_ner:
         for ex in examples:
-            for w in ex['ner']:
-                _insert('ner=%s' % w)
+            for w in ex['ners']:
+                for n in w:
+                    _insert('ner=%s' % n)
 
     # Term frequency feature
     if args.use_tf:
