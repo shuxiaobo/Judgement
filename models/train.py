@@ -105,8 +105,6 @@ if __name__ == '__main__':
     detail = parser.add_argument_group('AI Challenger Model Details')
     detail.add_argument('--concat-rnn-layers', type=bool, default=True,
                         help='Combine hidden states from each encoding layer')
-    detail.add_argument('--question-merge', type=str, default='self_attn',
-                        help='The way of computing the question representation')
     detail.add_argument('--use-pos', type=bool, default=True,
                         help='Whether to use pos features')
     detail.add_argument('--use-ner', type=bool, default=True,
