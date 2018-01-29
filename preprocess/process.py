@@ -5,6 +5,8 @@
 4. char embedding？
 5.
 '''
+#!/usr/bin/env python
+# -*- coding: UTF-8 -*-
 import logging
 
 import pandas as pd

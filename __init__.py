@@ -1,3 +1,6 @@
+#!/usr/bin/env python
+# -*- coding: UTF-8 -*-
+
 import torch
 
 USE_CUDA = torch.cuda.is_available()

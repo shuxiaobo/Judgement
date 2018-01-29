@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+# -*- coding: UTF-8 -*-
 import unicodedata
 
 from torch.utils.data import Dataset
