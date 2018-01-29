@@ -12,8 +12,9 @@ logger = logging.getLogger(__file__)
 
 
 class ReaderModel():
-    def __init__(self, input_size, hidden_size, output_size, feature_size, words_size, words_dict, tags_len, class_len, feature_dict,
-        bidirection=True, number_layers=2, dropout_rate=0.5, rnn_type=nn.LSTM, args=None):
+    def __init__(self, input_size, hidden_size, output_size, feature_size, words_size, words_dict, tags_len, class_len,
+                 feature_dict,
+                 bidirection=True, number_layers=2, dropout_rate=0.5, rnn_type=nn.LSTM, args=None):
         """
         for classify first
 
@@ -47,6 +48,7 @@ class ReaderModel():
                                 rnn_type=rnn_type)
 
     def init_optim(self, lr1, lr2=None, weight_decay=0):
+
         if not self.optimizer:
             ignore_param = list(map(id, self.network.embedding.parameters()))
             base_param = filter(lambda x: id(x) not in ignore_param, self.network.parameters())
@@ -54,6 +56,7 @@ class ReaderModel():
             optimizer = Adam([dict(params=base_param, lr=lr1, weight_decay=weight_decay),
                               {'params': self.network.embedding.parameters(), 'lr': lr2}])
             self.optimizer = optimizer
+        logger.info('Initiate Optim Over...')
 
     def load_embeddings(self, words, embedding_file):
         """Load pretrained embeddings for a given list of words, if they exist.
@@ -71,7 +74,7 @@ class ReaderModel():
         # When normalized, some words are duplicated. (Average the embeddings).
         vec_counts = {}
         with open(embedding_file, encoding='utf-8') as f:
-            words_num , size = f.readline().strip().split(' ')
+            words_num, size = f.readline().strip().split(' ')
             # assert (size == embedding.size(1) + 1)
             # assert ( self.words_num < words_num)
             for line in f:
@@ -133,3 +136,17 @@ class ReaderModel():
         # self.reset_parameters()
 
         return loss.data[0], ex[0].size(0)
+
+    def checkpoint(self, filename, epoch):
+        params = {
+            'state_dict': self.network.state_dict(),
+            'word_dict': self.word_dict,
+            'feature_dict': self.feature_dict,
+            'args': self.args,
+            'epoch': epoch,
+            'optimizer': self.optimizer.state_dict(),
+        }
+        try:
+            torch.save(params, filename)
+        except BaseException:
+            logger.warning('WARN: Saving failed... continuing anyway.')

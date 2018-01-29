@@ -10,6 +10,7 @@ from util.dataset import RnnDataSet
 
 logger = logging.getLogger(__file__)
 
+
 input_size = 128
 hidden_size = 128
 feature_size = 49
@@ -27,7 +28,9 @@ CLASS_LEN = 8
 
 
 def init_model(words_dict, feature_dict, args):
-    model = ReaderModel(input_size, hidden_size, output_size, feature_size, len(words_dict), words_dict, TAGS_LEN, CLASS_LEN, feature_dict=feature_dict,
+    logger.info('Initiate Model...')
+    model = ReaderModel(input_size, hidden_size, output_size, feature_size, len(words_dict), words_dict, TAGS_LEN,
+                        CLASS_LEN, feature_dict=feature_dict,
                         bidirection=True, number_layers=2,
                         dropout_rate=dropout_rate,
                         rnn_type=nn.LSTM, args=args)
@@ -41,6 +44,7 @@ def train(args, data_loader, model, global_stats):
     train_loss = util.AverageMeter()
     epoch_time = util.Timer()
 
+    logger.info('Train now! Output loss every %d batch...' % args.display_iter)
     # Run one epoch
     for idx, ex in enumerate(data_loader):
         train_loss.update(*model.update(ex))  # run on one batch
@@ -51,7 +55,7 @@ def train(args, data_loader, model, global_stats):
                         'loss = %.2f | elapsed time = %.2f (s)' %
                         (train_loss.avg, global_stats['timer'].time()))
             train_loss.reset()
-
+    print(train_loss.avg)
     logger.info('train: Epoch %d done. Time for epoch = %.2f (s)' %
                 (global_stats['epoch'], epoch_time.time()))
 
@@ -88,6 +92,7 @@ def main(args):
 
 
 if __name__ == '__main__':
+    logger.info("System initiate...")
     parser = argparse.ArgumentParser(
         'AI Challenger',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
@@ -118,7 +123,7 @@ if __name__ == '__main__':
     runtime.add_argument('--random-seed', type=int, default=1013,
                          help=('Random seed for all numpy/torch/cuda '
                                'operations (for reproducibility)'))
-    runtime.add_argument('--num-epochs', type=int, default=40,
+    runtime.add_argument('--num-epochs', type=int, default=10,
                          help='Train data iterations')
     runtime.add_argument('--batch-size', type=int, default=32,
                          help='Batch size for training')
@@ -128,6 +133,8 @@ if __name__ == '__main__':
                          help='Grad clipping')
     runtime.add_argument('--display-iter', type=int, default=100,
                          help='Display iter')
+    runtime.add_argument('--checkpoint', type=bool, default=True,
+                         help='checkpoint')
 
     args = parser.parse_args()
 

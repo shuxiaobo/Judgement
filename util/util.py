@@ -110,6 +110,7 @@ def load_train_data(filename, word2vec_file):
     :param filename:
     :return: words2index
     '''
+    logger.info('Load data from file %s ...' % filename)
     word2vec = gensim.models.KeyedVectors.load_word2vec_format(fname=word2vec_file, )
     words2index = {k: v for v, k in enumerate(word2vec.index2word)}
     data = []
@@ -152,10 +153,10 @@ def load_train_data(filename, word2vec_file):
                 data_dict.setdefault('fines', [int(lines[1].strip()) - 1])
                 data_dict.setdefault('clauses', [int(c) for c in lines[2].strip().split(',')])
                 data.append(data_dict)
-            if line_count > 1000:
+            if not USE_CUDA and line_count > 1000:
                 break
         # return words, poss, ners, fines, clauses
-
+        logger.info('Load data from file over. size: %d' % len(data))
         return data, words2index
 
 
@@ -196,11 +197,11 @@ def collate_batch(batch):
             if features is not None:
                 features[i, j, :s.size(0), :].copy_(words_features[i][j])
 
-    document = Variable(document).cuda() if USE_CUDA else  Variable(document)
-    document_mask = Variable(document_mask).cuda() if USE_CUDA else  Variable(document_mask)
-    features = Variable(features).cuda() if USE_CUDA else  Variable(features)
+    document = Variable(document).cuda() if USE_CUDA else Variable(document)
+    document_mask = Variable(document_mask).cuda() if USE_CUDA else Variable(document_mask)
+    features = Variable(features).cuda() if USE_CUDA else Variable(features)
     # fines = Variable(fines).cuda() if USE_CUDA else  Variable(fines)
-    clauses = Variable(clauses).cuda() if USE_CUDA else  Variable(clauses)
+    clauses = Variable(clauses).cuda() if USE_CUDA else Variable(clauses)
     return document, document_mask, features, fines, clauses
 
 
@@ -262,6 +263,7 @@ def vectorize(data, model):
 
 def build_feature_dict(args, examples):
     """Index features (one hot) from fields in examples and options."""
+    logger.info('Build features...')
 
     def _insert(feature):
         if feature not in feature_dict:
@@ -286,6 +288,7 @@ def build_feature_dict(args, examples):
     # Term frequency feature
     if args.use_tf:
         _insert('tf')
+    logger.info('Build features over. size : %d' % len(feature_dict))
     return feature_dict
 
 
