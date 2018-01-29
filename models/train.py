@@ -2,11 +2,11 @@ import argparse
 import logging
 
 import torch.nn as nn
-from model import ReaderModel
+from models import ReaderModel
 from torch.utils.data import DataLoader
 
-from util import util
-from util.dataset import RnnDataSet
+from utils import util
+from utils.dataset import RnnDataSet
 
 logger = logging.getLogger(__file__)
 logger.setLevel(logging.INFO)

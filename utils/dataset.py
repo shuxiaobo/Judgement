@@ -2,7 +2,7 @@ import unicodedata
 
 from torch.utils.data import Dataset
 
-from util import util
+from utils import util
 
 # ------------------------------------------------------------------------------
 # Dictionary class for tokens.

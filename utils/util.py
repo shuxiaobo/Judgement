@@ -5,7 +5,7 @@ from collections import Counter
 import gensim
 from torch.autograd import Variable
 
-from util import *
+from utils import *
 import torch
 import numpy as np
 

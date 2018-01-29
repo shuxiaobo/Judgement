@@ -2,7 +2,7 @@ import logging
 
 import torch
 import torch.nn as nn
-from layers import StackRnn
+from models.layers import StackRnn
 from torch.nn import NLLLoss
 from torch.optim import Adam
 
