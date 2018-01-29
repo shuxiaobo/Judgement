@@ -1,7 +1,8 @@
 import logging
 import time
 from collections import Counter
-
+import sys
+sys.path.append('..')
 import gensim
 from torch.autograd import Variable
 

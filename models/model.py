@@ -1,5 +1,6 @@
 import logging
-
+import sys
+sys.path.append('..')
 import torch
 import torch.nn as nn
 from models.layers import StackRnn

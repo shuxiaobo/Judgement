@@ -1,9 +1,12 @@
 import sys
+
 sys.path.append('..')
 import torch
+import sys
+
+sys.path.append('..')
 from .model import ReaderModel
 from .layers import StackRnn
-
 
 USE_CUDA = torch.cuda.is_available()
 

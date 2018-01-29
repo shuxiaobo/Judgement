@@ -1,6 +1,8 @@
 import logging
+import sys
 
-from CoreTokenizer import CoreTokenizer
+sys.path.append('..')
+from preprocess.CoreTokenizer import CoreTokenizer
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -14,5 +16,4 @@ class Sengment():
         self.segment = CoreTokenizer(classpath=dir_to_jar, annotators=annotation)
 
     def tokenize(self, text):
-
         return self.segment.tokenize(text)

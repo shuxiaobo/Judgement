@@ -6,7 +6,7 @@ from gensim.models import Word2Vec
 from gensim.models.word2vec import LineSentence
 
 sys.path.append('..')
-from Corenlp_Segment import Sengment
+from preprocess.Corenlp_Segment import Sengment
 
 filename = '../data/plain/train.txt'
 content_only = '../data/precessed2/content_only.txt'

@@ -1,7 +1,8 @@
 import unicodedata
 
 from torch.utils.data import Dataset
-
+import sys
+sys.path.append('..')
 from utils import util
 
 # ------------------------------------------------------------------------------

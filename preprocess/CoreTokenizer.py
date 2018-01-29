@@ -2,7 +2,9 @@
 import json
 
 import pexpect
+import sys
 
+sys.path.append('..')
 from preprocess.Tokenizer import Tokens, Tokenizer
 
 

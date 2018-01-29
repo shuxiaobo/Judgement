@@ -1,6 +1,8 @@
 import argparse
 import logging
 
+import sys
+sys.path.append('..')
 import torch.nn as nn
 from models import ReaderModel
 from torch.utils.data import DataLoader

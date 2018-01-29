@@ -1,7 +1,9 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import sys
 
+sys.path.append('..')
 USE_CUDA = torch.cuda.is_available()
 
 FloatTensor = torch.cuda.FloatTensor if USE_CUDA else torch.FloatTensor
@@ -15,9 +17,9 @@ class StackRnn(nn.Module):
     '''
 
     def __init__(self, input_size, hidden_size, output_size, words_size, feature_size, bidirection=True,
-        number_layers=3,
-        dropout_rate=0.5,
-        rnn_type=nn.LSTM):
+                 number_layers=3,
+                 dropout_rate=0.5,
+                 rnn_type=nn.LSTM):
         super(StackRnn, self).__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
@@ -88,6 +90,7 @@ class StackRnn(nn.Module):
             para_repre = self.rnns[1](torch.cat(sen_represen, 0).view(-1, 1, self.hidden_size * 2))[1][0]
             paragraph_representation.append(para_repre)  # 拿到篇章的表示
 
-        out = F.softmax(self.fc(torch.cat(paragraph_representation, 0).view(-1, x.size(0), self.hidden_size * 2)).squeeze())  # batch * output_size
+        out = F.softmax(self.fc(torch.cat(paragraph_representation, 0).view(-1, x.size(0),
+                                                                            self.hidden_size * 2)).squeeze())  # batch * output_size
 
         return out
