@@ -234,7 +234,7 @@ def vectorize(data, model):
     else:
         features = None
 
-    document = torch.zeros(sens_len, max(seq_len))  # 单个样例 sen_num * sen_len, 不用段落，直接句子然后文章
+    document = torch.zeros(sens_len, max(seq_len)).long()  # 单个样例 sen_num * sen_len, 不用段落，直接句子然后文章
     for i, w in enumerate(data['words']):
          document[i, :len(w)].copy_(torch.from_numpy(np.asarray(w)))
 
@@ -266,7 +266,7 @@ def vectorize(data, model):
         for i, d in enumerate(data['poss']):
             for j, w in enumerate(d):
                 features[i][j][feature_dict['tf']] = counter[w.lower()] * 1.0 / l
-    return document, features, target_tags, classify
+    return document.long(), features, target_tags, classify
 
 
 def build_feature_dict(args, examples):
