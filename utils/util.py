@@ -152,7 +152,7 @@ def load_train_data(filename, word2vec_file):
                     '''直接丢掉整个样例'''
                     wrong = True
                     wrong_count += 1
-                    print("Get some words wrong. %s, wrong_count %d, line %d" % (s.split(' '), wrong_count, line_count))
+                    print("Get some words wrong, wrong_count %d, line %d" % ( wrong_count, line_count))
                     break
 
             if not wrong:
