@@ -75,8 +75,7 @@ def train(args, data_loader, model, global_stats):
 
 def make_dataset(data, model):
     rnn_dataset = RnnDataSet(data, model)
-    data_loader = DataLoader(rnn_dataset, batch_size=32, shuffle=False,
-                             num_workers=4, collate_fn=util.collate_batch, pin_memory=False, drop_last=False)
+    data_loader = DataLoader(rnn_dataset, batch_size=32, shuffle=False, collate_fn=util.collate_batch, pin_memory=False, drop_last=False)
     return data_loader
 
 
