@@ -3,13 +3,15 @@ import logging
 import torch
 import torch.nn as nn
 from layers import StackRnn
-from torch.nn import MultiLabelMarginLoss
 from torch.nn import NLLLoss
 from torch.optim import Adam
-from torch.autograd import Variable
 
 logger = logging.getLogger(__file__)
-
+logger.setLevel(logging.INFO)
+fmt = logging.Formatter('%(asctime)s: [ %(message)s ]', '%m/%d/%Y %I:%M:%S %p')
+console = logging.StreamHandler()
+console.setFormatter(fmt)
+logger.addHandler(console)
 
 class ReaderModel():
     def __init__(self, input_size, hidden_size, output_size, feature_size, words_size, words_dict, tags_len, class_len,

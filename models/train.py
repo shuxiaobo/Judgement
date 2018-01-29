@@ -9,7 +9,11 @@ from util import util
 from util.dataset import RnnDataSet
 
 logger = logging.getLogger(__file__)
-
+logger.setLevel(logging.INFO)
+fmt = logging.Formatter('%(asctime)s: [ %(message)s ]', '%m/%d/%Y %I:%M:%S %p')
+console = logging.StreamHandler()
+console.setFormatter(fmt)
+logger.addHandler(console)
 
 input_size = 128
 hidden_size = 128
