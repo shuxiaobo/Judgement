@@ -18,7 +18,6 @@ logger.setLevel(logging.INFO)
 fmt = logging.Formatter('%(asctime)s: [ %(message)s ]', '%m/%d/%Y %I:%M:%S %p')
 console = logging.StreamHandler()
 console.setFormatter(fmt)
-logger.addHandler(console)
 
 USE_CUDA = torch.cuda.is_available()
 
@@ -237,7 +236,7 @@ def vectorize(data, model):
 
     document = torch.zeros(sens_len, max(seq_len))  # 单个样例 sen_num * sen_len, 不用段落，直接句子然后文章
     for i, w in enumerate(data['words']):
-        document[i, :len(w)].copy_(LongTensor(w))
+         document[i, :len(w)].copy_(torch.from_numpy(np.asarray(w)))
 
     target_tags = torch.zeros(1, len(data['clauses']))
     # for i, t in data['clausea']:
