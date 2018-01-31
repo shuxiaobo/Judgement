@@ -5,6 +5,7 @@ import logging
 import time
 from collections import Counter
 import sys
+
 sys.path.append('..')
 import gensim
 from torch.autograd import Variable
@@ -18,6 +19,7 @@ logger.setLevel(logging.INFO)
 fmt = logging.Formatter('%(asctime)s: [ %(message)s ]', '%m/%d/%Y %I:%M:%S %p')
 console = logging.StreamHandler()
 console.setFormatter(fmt)
+logger.addHandler(console)
 
 USE_CUDA = torch.cuda.is_available()
 
@@ -127,12 +129,9 @@ def load_train_data(filename, word2vec_file):
         line_count = 0
         wrong = False
         for lines in f:
-            lines = [lines.strip(), f.readline().strip(), f.readline().strip(), f.readline().strip()]
+            lines = [lines.strip(), f.readline().strip(), f.readline().strip()]
 
-            sen = lines[0].strip().split('\t')
-
-            if len(sen) <= 1:
-                continue
+            sen = lines[0].strip().split('***')
 
             data_dict = {}
             w = []
@@ -141,17 +140,15 @@ def load_train_data(filename, word2vec_file):
             line_count += 1
             for s in sen:
                 try:
-                    w.append([words2index[w.split(',')[0]] for w in s.split(' ')])
-                    if len(w) <= 1:
-                        continue
-                    n.append([w.split(',')[1] for w in s.split(' ')])
-                    p.append([w.split(',')[2] for w in s.split(' ')])
+                    w.append([words2index[w.split(':::')[0]] for w in s.split('###')])
+                    n.append([w.split(':::')[1] for w in s.split(' ')])
+                    p.append([w.split(':::')[2] for w in s.split(' ')])
                     wrong = False
                 except:
                     '''直接丢掉整个样例'''
                     wrong = True
                     wrong_count += 1
-                    print("Get some words wrong, wrong_count %d, line %d" % ( wrong_count, line_count))
+                    print("Get some words wrong, wrong_count %d, line %d" % (wrong_count, line_count))
                     break
 
             if not wrong:
@@ -161,11 +158,108 @@ def load_train_data(filename, word2vec_file):
                 data_dict.setdefault('fines', [int(lines[1].strip()) - 1])
                 data_dict.setdefault('clauses', [int(c) for c in lines[2].strip().split(',')])
                 data.append(data_dict)
-            if not USE_CUDA and line_count > 1000:
+            # if not USE_CUDA and line_count > 10000:
+            if USE_CUDA and line_count > 1000:
                 break
         # return words, poss, ners, fines, clauses
         logger.info('Load data from file over. size: %d' % len(data))
         return data, words2index
+
+
+def load_data(content_only='../data/processed/content_only.txt',
+              word2vec_file='../data/processed/word2vec.bin',
+              pos_content='../data/processed/pos_content.txt',
+              ner_content='../data/processed/ner_content.txt',
+              clauses_content='../data/processed/clauses_content.txt',
+              fines_content='../data/processed/fines_content.txt', ):
+    logger.info('Load data from files ...')
+    word2vec = gensim.models.KeyedVectors.load_word2vec_format(fname=word2vec_file, )
+    words2index = {k: v + 1 for v, k in enumerate(word2vec.index2word)}
+    words2index['<Unknow>'] = 0
+    data = []
+    content_dic = {}
+    pos_dic = {}
+    ner_dic = {}
+    clauses_dic = {}
+    fines_dic = {}
+
+    content_only_file = open(content_only, encoding='utf-8', mode='r')
+    pos_file = open(pos_content, encoding='utf-8', mode='r')
+    ner_file = open(ner_content, encoding='utf-8', mode='r')
+    clauses_file = open(clauses_content, encoding='utf-8', mode='r')
+    fines_file = open(fines_content, encoding='utf-8', mode='r')
+
+    for line in content_only_file.readlines():
+        idd = line.strip().split('\t')
+        sen = idd[1].split(' ')
+        idd = int(idd[0])
+        content_dic.setdefault(idd, sen)
+    for line in pos_file.readlines():
+        idd = line.strip().split('\t')
+        sen = idd[1].split(' ')
+        idd = int(idd[0])
+        pos_dic.setdefault(idd, sen)
+    for line in ner_file.readlines():
+        idd = line.strip().split('\t')
+        sen = idd[1].split(' ')
+        idd = int(idd[0])
+        ner_dic.setdefault(idd, sen)
+    for line in clauses_file.readlines():
+        idd = line.strip().split('\t')
+        sen = idd[1].split(',')
+        idd = int(idd[0])
+        clauses_dic.setdefault(idd, sen)
+    for line in fines_file.readlines():
+        idd = line.strip().split('\t')
+        sen = idd[1].split(' ')
+        idd = int(idd[0])
+        fines_dic.setdefault(idd, sen[0])
+
+    for k, sentence in content_dic.items():
+        data_dict = {}
+        if ner_dic.get(k) is not None and pos_dic.get(k) is not None and clauses_dic.get(
+                k) is not None and fines_dic.get(k) is not None:
+            # 拆分文章
+
+            ner = ner_dic.get(k)
+            pos = pos_dic.get(k)
+            ner_list = []
+            pos_list = []
+            word_list = []
+
+            ner_sub_list = []
+            pos_sub_list = []
+            word_sub_list = []
+
+            for i, w in enumerate(sentence):
+                if w == '。' or w == '，' or w == '：' or i == len(sentence) - 1:
+                    if len(word_sub_list) > 0:
+                        ner_list.append(ner_sub_list.copy())
+                        ner_sub_list.clear()
+                        pos_list.append(pos_sub_list.copy())
+                        pos_sub_list.clear()
+                        word_list.append(word_sub_list.copy())
+                        word_sub_list.clear()
+                else:
+                    word_sub_list.append(words2index[w])
+                    ner_sub_list.append(ner[i])
+                    pos_sub_list.append(pos[i])
+
+            data_dict.setdefault('words', word_list)
+            data_dict.setdefault('ners', ner_list)
+            data_dict.setdefault('poss', pos_list)
+            data_dict.setdefault('fines', [int(fines_dic.get(k).strip()) - 1]) # pytorch 已经改版，class预测的是从0开始的
+            data_dict.setdefault('clauses', [int(c) for c in clauses_dic.get(k)])
+
+            data.append(data_dict)
+    content_only_file.close()
+    pos_file.close()
+    ner_file.close()
+    clauses_file.close()
+    fines_file.close()
+
+    logger.info('Load the data over , size : %d' % len(data))
+    return data, words2index
 
 
 def collate_batch(batch):
@@ -210,7 +304,7 @@ def collate_batch(batch):
     features = Variable(features).cuda() if USE_CUDA else Variable(features)
     # fines = Variable(fines).cuda() if USE_CUDA else  Variable(fines)
     clauses = Variable(clauses).cuda() if USE_CUDA else Variable(clauses)
-    return document, document_mask, features, fines, clauses
+    return document.long(), document_mask, features, fines, clauses
 
 
 def vectorize(data, model):
@@ -236,7 +330,10 @@ def vectorize(data, model):
 
     document = torch.zeros(sens_len, max(seq_len)).long()  # 单个样例 sen_num * sen_len, 不用段落，直接句子然后文章
     for i, w in enumerate(data['words']):
-         document[i, :len(w)].copy_(torch.from_numpy(np.asarray(w)))
+        try:
+            document[i, :len(w)].copy_(torch.from_numpy(np.asarray(w)))
+        except:
+            print(data['words'])
 
     target_tags = torch.zeros(1, len(data['clauses']))
     # for i, t in data['clausea']:
@@ -297,6 +394,7 @@ def build_feature_dict(args, examples):
     if args.use_tf:
         _insert('tf')
     logger.info('Build features over. size : %d' % len(feature_dict))
+    print(feature_dict)
     return feature_dict
 
 

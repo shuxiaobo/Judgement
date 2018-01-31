@@ -5,19 +5,24 @@ import argparse
 import logging
 
 import sys
+
 sys.path.append('..')
 import torch.nn as nn
-from models import ReaderModel
 from torch.utils.data import DataLoader
+import torch
+import time
 
+from models import ReaderModel
 from utils import util
 from utils.dataset import RnnDataSet
+from utils.evaluation import Evaluate
 
 logger = logging.getLogger(__file__)
 logger.setLevel(logging.INFO)
 fmt = logging.Formatter('%(asctime)s: [ %(message)s ]', '%m/%d/%Y %I:%M:%S %p')
 console = logging.StreamHandler()
 console.setFormatter(fmt)
+logger.addHandler(console)
 
 input_size = 128
 hidden_size = 128
@@ -33,6 +38,12 @@ train_file = '../data/precessed/pos_ner_content.txt'
 word2vec_file = '../data/precessed/word2vec.bin'
 TAGS_LEN = 452
 CLASS_LEN = 8
+
+USE_CUDA = torch.cuda.is_available()
+
+FloatTensor = torch.cuda.FloatTensor if USE_CUDA else torch.FloatTensor
+LongTensor = torch.cuda.LongTensor if USE_CUDA else torch.LongTensor
+ByteTensor = torch.cuda.ByteTensor if USE_CUDA else torch.ByteTensor
 
 
 def init_model(words_dict, feature_dict, args):
@@ -51,8 +62,6 @@ def train(args, data_loader, model, global_stats):
     # Initialize meters + timers
     train_loss = util.AverageMeter()
     epoch_time = util.Timer()
-
-    logger.info('Train now! Output loss every %d batch...' % args.display_iter)
     # Run one epoch
     for idx, ex in enumerate(data_loader):
         train_loss.update(*model.update(ex))  # run on one batch
@@ -75,12 +84,14 @@ def train(args, data_loader, model, global_stats):
 
 def make_dataset(data, model):
     rnn_dataset = RnnDataSet(data, model)
-    data_loader = DataLoader(rnn_dataset, batch_size=32, shuffle=False, collate_fn=util.collate_batch, pin_memory=False, drop_last=False)
+    data_loader = DataLoader(rnn_dataset, batch_size=32, shuffle=False, collate_fn=util.collate_batch, pin_memory=False,
+                             drop_last=False)
     return data_loader
 
 
 def main(args):
-    data, word2ids = util.load_train_data(train_file, word2vec_file)
+    # data, word2ids = util.load_train_data(train_file, word2vec_file)
+    data, word2ids = util.load_data()
     feature_dict = util.build_feature_dict(args, data)
     model = init_model(words_dict=word2ids, feature_dict=feature_dict, args=args)
     model.load_embeddings(word2ids, embedding_file=word2vec_file)
@@ -90,12 +101,49 @@ def main(args):
 
     # TRAIN/VALID LOOP
     logger.info('-' * 100)
-    logger.info('Starting training...')
+    logger.info('Train now! Output loss every %d batch...' % args.display_iter)
     stats = {'timer': util.Timer(), 'epoch': 0, 'best_valid': 0}
     for epoch in range(start_epoch, args.num_epochs):
         stats['epoch'] = epoch
 
         train(args, data_loader, model, stats)
+
+        result = evaluate(model, data_loader, global_stats=stats)
+
+        if result[args.valid_metric] > stats['best_valid']:
+            logger.info('Best valid: %s = %.2f (epoch %d, %d updates)' %
+                        (args.valid_metric, result[args.valid_metric],
+                         stats['epoch'], model.updates))
+            model.save(args.model_file)
+            stats['best_valid'] = result[args.valid_metric]
+
+
+def evaluate(model, data_loader, global_stats, mode='train'):
+    # Use precision for classify
+    eval_time = util.Timer()
+    start_acc = util.AverageMeter()
+
+    # Make predictions
+    examples = 0
+    for ex in data_loader:
+        batch_size = ex[0].size(0)
+        pred_s = model.predict(ex)
+        answer = ex[4]
+        # We get metrics for independent start/end and joint start/end
+        start_acc.update(Evaluate.accuracies(pred_s, answer), 1)
+
+        # If getting train accuracies, sample max 10k
+        examples += batch_size
+        if mode == 'train' and examples >= 1e4:
+            break
+
+    logger.info('%s valid unofficial use Accuracy: Epoch = %d | acc = %.2f | ' %
+                (mode, global_stats['epoch'], start_acc.avg) +
+                ' = %d | ' %
+                (examples) +
+                'valid time = %.2f (s)' % eval_time.time())
+
+    return {'acc': start_acc}
 
 
 if __name__ == '__main__':
@@ -136,10 +184,17 @@ if __name__ == '__main__':
                          help='Batch size during validation/testing')
     runtime.add_argument('--grad-clipping', type=bool, default=True,
                          help='Grad clipping')
-    runtime.add_argument('--display-iter', type=int, default=100,
-                         help='Display iter')
     runtime.add_argument('--checkpoint', type=bool, default=True,
                          help='checkpoint')
+    runtime.add_argument('--model-file', type=str, default='check' + str(time.time().is_integer()) + '.model',
+                         help='Model file save path')
+
+    # General
+    general = parser.add_argument_group('General')
+    general.add_argument('--valid-metric', type=str, default='acc',
+                         help='The evaluation metric used for model selection')
+    general.add_argument('--display-iter', type=int, default=25,
+                         help='Log state after every <display_iter> epochs')
 
     args = parser.parse_args()
 

@@ -40,7 +40,7 @@ class CoreTokenizer(Tokenizer):
         annotators = ','.join(annotators)
         options = ','.join(['untokenizable=noneDelete',
                             'invertible=true'])
-        cmd = ['java', '-mx' + self.memory, '-cp', '%s' % self.classpath,
+        cmd = ['java', '-mx' + self.memory, '-cp', '\'%s\'' % self.classpath,
                'edu.stanford.nlp.pipeline.StanfordCoreNLP', '-props', 'StanfordCoreNLP-chinese.properties',
                '-annotators',
                annotators, '-tokenize.options', options,
@@ -49,7 +49,7 @@ class CoreTokenizer(Tokenizer):
         self.corenlp = pexpect.spawn('/bin/bash', maxread=1000000, timeout=60)
         self.corenlp.setecho(False)
         self.corenlp.sendline('stty -icanon')  # stty是用来设置终端的，禁用规范输入。
-        self.corenlp.sendline(' '.join(cmd))  # join 是把数组变成字符串，每个元素之间用空格隔开
+        self.corenlp.sendline(' '.join(cmd))  # 在linux直接执行命令的时候，要在路径后面加""
         self.corenlp.delaybeforesend = 0
         self.corenlp.delayafterread = 0
         self.corenlp.expect_exact('NLP>', searchwindowsize=100)

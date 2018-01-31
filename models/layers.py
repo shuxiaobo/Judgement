@@ -93,7 +93,8 @@ class StackRnn(nn.Module):
             para_repre = self.rnns[1](torch.cat(sen_represen, 0).view(-1, 1, self.hidden_size * 2))[1][0]
             paragraph_representation.append(para_repre)  # 拿到篇章的表示
 
-        out = F.softmax(self.fc(torch.cat(paragraph_representation, 0).view(-1, x.size(0),
-                                                                            self.hidden_size * 2)).squeeze())  # batch * output_size
+        out = F.log_softmax(self.fc(torch.cat(paragraph_representation, 0).view(-1, x.size(0),
+                                                                                self.hidden_size * 2)).squeeze(),
+                            dim=0)  # batch * output_size
 
         return out

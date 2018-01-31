@@ -82,13 +82,13 @@ class Tokens(object):
         result = []
         sen = []
         for d in self.data:
-            if d[self.TEXT] == '。':
-                result.append(' '.join(sen.copy()))  # join 句子之内
+            if d[self.TEXT] == '。' or d[self.TEXT] == '，'or d[self.TEXT] == '：':
+                result.append('###'.join(sen.copy()))  # join 句子之内
                 sen.clear()
             else:
-                sen.append(','.join([d[self.TEXT], d[self.POS], d[self.NER]]))  # join 单词内部
+                sen.append(':::'.join([d[self.TEXT], d[self.POS], d[self.NER]]))  # join 单词内部
 
-        return '\t'.join(result)  # join 句子之间
+        return '***'.join(result)  # join 句子之间
 
     def ngrams(self, n=1, uncased=False, filter_fn=None, as_strings=True):
         """Returns a list of all ngrams from length 1 to n.

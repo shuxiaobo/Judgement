@@ -8,7 +8,9 @@ import torch
 import torch.nn as nn
 from models.layers import StackRnn
 from torch.nn import NLLLoss
+from torch.nn import CrossEntropyLoss
 from torch.optim import Adam
+import numpy as np
 
 logger = logging.getLogger(__file__)
 logger.setLevel(logging.INFO)
@@ -16,6 +18,13 @@ fmt = logging.Formatter('%(asctime)s: [ %(message)s ]', '%m/%d/%Y %I:%M:%S %p')
 console = logging.StreamHandler()
 console.setFormatter(fmt)
 logger.addHandler(console)
+
+USE_CUDA = torch.cuda.is_available()
+
+FloatTensor = torch.cuda.FloatTensor if USE_CUDA else torch.FloatTensor
+LongTensor = torch.cuda.LongTensor if USE_CUDA else torch.LongTensor
+ByteTensor = torch.cuda.ByteTensor if USE_CUDA else torch.ByteTensor
+
 
 class ReaderModel():
     def __init__(self, input_size, hidden_size, output_size, feature_size, words_size, words_dict, tags_len, class_len,
@@ -37,7 +46,7 @@ class ReaderModel():
         :param dropout_rate:
         :param rnn_type:
         """
-        self.loss_fun = NLLLoss()
+        self.loss_fun = CrossEntropyLoss()
         self.words_dict = words_dict
         self.tags_len = tags_len
         self.class_len = class_len
@@ -52,9 +61,11 @@ class ReaderModel():
                                 number_layers=number_layers,
                                 dropout_rate=dropout_rate,
                                 rnn_type=rnn_type)
+        if USE_CUDA:
+            self.network.cuda()
 
     def init_optim(self, lr1, lr2=None, weight_decay=0):
-
+        self.network.init_weight()
         if not self.optimizer:
             ignore_param = list(map(id, self.network.embedding.parameters()))
             base_param = filter(lambda x: id(x) not in ignore_param, self.network.parameters())
@@ -143,10 +154,20 @@ class ReaderModel():
 
         return loss.data[0], ex[0].size(0)
 
+
+    def predict(self, ex):
+
+        self.network.eval() # 测试模式
+
+        cls = self.network(*ex)
+
+        return np.argmax(cls.data.cpu().numpy(), 1)
+
+
     def checkpoint(self, filename, epoch):
         params = {
             'state_dict': self.network.state_dict(),
-            'word_dict': self.word_dict,
+            'word_dict': self.words_dict,
             'feature_dict': self.feature_dict,
             'args': self.args,
             'epoch': epoch,
