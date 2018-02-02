@@ -71,19 +71,19 @@ def tokenize(text):
 #                             flag += 1
 
 train_file = open(filename, encoding='utf-8')
-# content_only_file = open(content_only, encoding='utf-8', mode='w+')
-# pos_file = open(pos_content, encoding='utf-8', mode='w+')
-# ner_file = open(ner_content, encoding='utf-8', mode='w+')
-# clauses_file = open(clauses_content, encoding='utf-8', mode='w+')
-# fines_file = open(fines_content, encoding='utf-8', mode='w+')
+content_only_file = open(content_only, encoding='utf-8', mode='w+')
+pos_file = open(pos_content, encoding='utf-8', mode='w+')
+ner_file = open(ner_content, encoding='utf-8', mode='w+')
+clauses_file = open(clauses_content, encoding='utf-8', mode='w+')
+fines_file = open(fines_content, encoding='utf-8', mode='w+')
 
 pos_ner_file = open(pos_ner_content, encoding='utf-8', mode='w+')
 
 
 def assign():
     workers = workers_pool(4, initializer=init)
-    seg_fun = partial(pair_segment)
-    # seg_fun = partial(segment)
+    # seg_fun = partial(pair_segment)
+    seg_fun = partial(segment)
     step = 20
 
     lines = train_file.readlines()
@@ -97,27 +97,27 @@ def assign():
     workers.join()
 
     train_file.close()
-    pos_ner_file.close()
-    # content_only_file.close()
-    # pos_file.close()
-    # ner_file.close()
-    # clauses_file.close()
-    # fines_file.close()
+    # pos_ner_file.close()
+    content_only_file.close()
+    pos_file.close()
+    ner_file.close()
+    clauses_file.close()
+    fines_file.close()
     return
 
 
-# def segment(line):
-#     sen = line.strip().split('\t')
-#     if len(sen[1]) > 5 and len(sen[1]) < 3000:
-#         tokens = tokenize(sen[1])
-#         words = ' '.join(tokens.words())
-#         # lock.acquire()
-#         content_only_file.write(sen[0] + '\t' + words + '\n')
-#         pos_file.write(sen[0] + '\t' + ' '.join(tokens.pos()) + '\n')
-#         ner_file.write(sen[0] + '\t' + ' '.join(tokens.entities()) + '\n')
-#         clauses_file.write(sen[0] + '\t' + sen[3] + '\n')
-#         fines_file.write(sen[0] + '\t' + sen[2] + '\n')
-#         # lock.release()
+def segment(line):
+    sen = line.strip().split('\t')
+    if len(sen[1]) > 5 and len(sen[1]) < 3000:
+        tokens = tokenize(sen[1])
+        words = ' '.join(tokens.words())
+        # lock.acquire()
+        content_only_file.write(sen[0] + '\t' + words + '\n')
+        pos_file.write(sen[0] + '\t' + ' '.join(tokens.pos()) + '\n')
+        ner_file.write(sen[0] + '\t' + ' '.join(tokens.entities()) + '\n')
+        clauses_file.write(sen[0] + '\t' + sen[3] + '\n')
+        fines_file.write(sen[0] + '\t' + sen[2] + '\n')
+        # lock.release()
 
 
 def pair_segment(line):

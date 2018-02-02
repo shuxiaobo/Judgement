@@ -13,10 +13,12 @@ from torch.autograd import Variable
 from utils import *
 import torch
 import numpy as np
+import os
+import pickle
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
-fmt = logging.Formatter('%(asctime)s: [ %(message)s ]', '%m/%d/%Y %I:%M:%S %p')
+fmt = logging.Formatter('%(filename)s %(asctime)s: [ %(message)s ]', '%m/%d/%Y %I:%M:%S %p')
 console = logging.StreamHandler()
 console.setFormatter(fmt)
 logger.addHandler(console)
@@ -173,93 +175,116 @@ def load_data(content_only='../data/processed/content_only.txt',
               clauses_content='../data/processed/clauses_content.txt',
               fines_content='../data/processed/fines_content.txt', ):
     logger.info('Load data from files ...')
+    # if not os.path.isfile('../data/processed/embed.bin'):
+    #     logger.info('Load word2vec from model...')
+    #     word2vec = gensim.models.KeyedVectors.load_word2vec_format(fname=word2vec_file, )
+    #     words2index = {k: v + 1 for v, k in enumerate(word2vec.index2word)}
+    #     words2index['<Unknow>'] = 0
+    #     embed_arr = word2vec.syn0
+    #     with open('../data/processed/embed.bin', mode='bw+') as f:
+    #         pickle.dump({'words2index': words2index, 'embed_arr': embed_arr}, f)
+    #     logger.info('Save the word2vec to file data/processed/embed.bin')
+    # else:
+    #     logger.info('Load word2vec from file...')
+    #     with open('../data/processed/embed.bin', 'rb') as f:
+    #         da = pickle.load(f)
+    #     words2index = da['words2index']
+    #     embed_arr = da['embed_arr']
     word2vec = gensim.models.KeyedVectors.load_word2vec_format(fname=word2vec_file, )
     words2index = {k: v + 1 for v, k in enumerate(word2vec.index2word)}
     words2index['<Unknow>'] = 0
-    data = []
-    content_dic = {}
-    pos_dic = {}
-    ner_dic = {}
-    clauses_dic = {}
-    fines_dic = {}
+    embed_arr = word2vec.syn0
+    if not os.path.isfile('../data/processed/data.bin'):
+        data = []
+        content_dic = {}
+        pos_dic = {}
+        ner_dic = {}
+        clauses_dic = {}
+        fines_dic = {}
 
-    content_only_file = open(content_only, encoding='utf-8', mode='r')
-    pos_file = open(pos_content, encoding='utf-8', mode='r')
-    ner_file = open(ner_content, encoding='utf-8', mode='r')
-    clauses_file = open(clauses_content, encoding='utf-8', mode='r')
-    fines_file = open(fines_content, encoding='utf-8', mode='r')
+        content_only_file = open(content_only, encoding='utf-8', mode='r')
+        pos_file = open(pos_content, encoding='utf-8', mode='r')
+        ner_file = open(ner_content, encoding='utf-8', mode='r')
+        clauses_file = open(clauses_content, encoding='utf-8', mode='r')
+        fines_file = open(fines_content, encoding='utf-8', mode='r')
 
-    for line in content_only_file.readlines():
-        idd = line.strip().split('\t')
-        sen = idd[1].split(' ')
-        idd = int(idd[0])
-        content_dic.setdefault(idd, sen)
-    for line in pos_file.readlines():
-        idd = line.strip().split('\t')
-        sen = idd[1].split(' ')
-        idd = int(idd[0])
-        pos_dic.setdefault(idd, sen)
-    for line in ner_file.readlines():
-        idd = line.strip().split('\t')
-        sen = idd[1].split(' ')
-        idd = int(idd[0])
-        ner_dic.setdefault(idd, sen)
-    for line in clauses_file.readlines():
-        idd = line.strip().split('\t')
-        sen = idd[1].split(',')
-        idd = int(idd[0])
-        clauses_dic.setdefault(idd, sen)
-    for line in fines_file.readlines():
-        idd = line.strip().split('\t')
-        sen = idd[1].split(' ')
-        idd = int(idd[0])
-        fines_dic.setdefault(idd, sen[0])
+        for line in content_only_file.readlines():
+            idd = line.strip().split('\t')
+            sen = idd[1].split(' ')
+            idd = int(idd[0])
+            content_dic.setdefault(idd, sen)
+        for line in pos_file.readlines():
+            idd = line.strip().split('\t')
+            sen = idd[1].split(' ')
+            idd = int(idd[0])
+            pos_dic.setdefault(idd, sen)
+        for line in ner_file.readlines():
+            idd = line.strip().split('\t')
+            sen = idd[1].split(' ')
+            idd = int(idd[0])
+            ner_dic.setdefault(idd, sen)
+        for line in clauses_file.readlines():
+            idd = line.strip().split('\t')
+            sen = idd[1].split(',')
+            idd = int(idd[0])
+            clauses_dic.setdefault(idd, sen)
+        for line in fines_file.readlines():
+            idd = line.strip().split('\t')
+            sen = idd[1].split(' ')
+            idd = int(idd[0])
+            fines_dic.setdefault(idd, sen[0])
 
-    for k, sentence in content_dic.items():
-        data_dict = {}
-        if ner_dic.get(k) is not None and pos_dic.get(k) is not None and clauses_dic.get(
-                k) is not None and fines_dic.get(k) is not None:
-            # 拆分文章
+        for k, sentence in content_dic.items():
+            data_dict = {}
+            if ner_dic.get(k) is not None and pos_dic.get(k) is not None and clauses_dic.get(
+                    k) is not None and fines_dic.get(k) is not None:
+                # 拆分文章
 
-            ner = ner_dic.get(k)
-            pos = pos_dic.get(k)
-            ner_list = []
-            pos_list = []
-            word_list = []
+                ner = ner_dic.get(k)
+                pos = pos_dic.get(k)
+                ner_list = []
+                pos_list = []
+                word_list = []
 
-            ner_sub_list = []
-            pos_sub_list = []
-            word_sub_list = []
+                ner_sub_list = []
+                pos_sub_list = []
+                word_sub_list = []
 
-            for i, w in enumerate(sentence):
-                if w == '。' or w == '，' or w == '：' or i == len(sentence) - 1:
-                    if len(word_sub_list) > 0:
-                        ner_list.append(ner_sub_list.copy())
-                        ner_sub_list.clear()
-                        pos_list.append(pos_sub_list.copy())
-                        pos_sub_list.clear()
-                        word_list.append(word_sub_list.copy())
-                        word_sub_list.clear()
-                else:
-                    word_sub_list.append(words2index[w])
-                    ner_sub_list.append(ner[i])
-                    pos_sub_list.append(pos[i])
+                for i, w in enumerate(sentence):
+                    if w == '。' or w == '，' or w == '：' or i == len(sentence) - 1:
+                        if len(word_sub_list) > 0:
+                            ner_list.append(ner_sub_list.copy())
+                            ner_sub_list.clear()
+                            pos_list.append(pos_sub_list.copy())
+                            pos_sub_list.clear()
+                            word_list.append(word_sub_list.copy())
+                            word_sub_list.clear()
+                    else:
+                        word_sub_list.append(words2index[w])
+                        ner_sub_list.append(ner[i])
+                        pos_sub_list.append(pos[i])
 
-            data_dict.setdefault('words', word_list)
-            data_dict.setdefault('ners', ner_list)
-            data_dict.setdefault('poss', pos_list)
-            data_dict.setdefault('fines', [int(fines_dic.get(k).strip()) - 1]) # pytorch 已经改版，class预测的是从0开始的
-            data_dict.setdefault('clauses', [int(c) for c in clauses_dic.get(k)])
+                data_dict.setdefault('words', word_list)
+                data_dict.setdefault('ners', ner_list)
+                data_dict.setdefault('poss', pos_list)
+                data_dict.setdefault('fines', [int(fines_dic.get(k).strip()) - 1])  # pytorch 已经改版，class预测的是从0开始的
+                data_dict.setdefault('clauses', [int(c) for c in clauses_dic.get(k)])
 
-            data.append(data_dict)
-    content_only_file.close()
-    pos_file.close()
-    ner_file.close()
-    clauses_file.close()
-    fines_file.close()
+                data.append(data_dict)
+        content_only_file.close()
+        pos_file.close()
+        ner_file.close()
+        clauses_file.close()
+        fines_file.close()
 
-    logger.info('Load the data over , size : %d' % len(data))
-    return data, words2index
+        with open('../data/processed/data.bin', mode='bw+') as f:
+            pickle.dump(data, f)
+        logger.info('Load the data over , size : %d, save it ../data/processed/data.bin' % len(data))
+    else:
+        logger.info('Load the data from pickle file...')
+        with open('../data/processed/data.bin', 'rb') as f:
+            data = pickle.load(f)
+    return data, words2index, embed_arr
 
 
 def collate_batch(batch):
@@ -274,11 +299,16 @@ def collate_batch(batch):
     """
     words = [d[0] for d in batch]  # batch_size * sentences * seq_len
     words_features = [d[1] for d in batch]  # batch_size * sentences * seq_len * feature_len
-    fines = [d[2] for d in batch]
-    clauses = torch.cat([d[3] for d in batch], 0)
+    words_mask = [d[2] for d in batch]  # batch_size * sentences * seq_len * feature_len
+    fines = [d[3] for d in batch]
+    clauses = torch.cat([d[4] for d in batch], 0)
+
+    sort_data = sorted(zip(words, words_features, words_mask, fines, clauses), key=lambda x: len(x[0]), reverse=True)
+
+    words, words_features, words_mask, clauses, fines = zip(*sort_data)
 
     batch_size = len(batch)  # 这里torch 给的batch 是个list
-    lengths = [len(d) for b in words for d in b]  # sentences count for each sample
+    lengths = [len(d) for b in words for d in b]  # words count in sentences for each sample
 
     sentences_count = [len(d) for d in words]
 
@@ -294,17 +324,18 @@ def collate_batch(batch):
 
     for i, d in enumerate(words):  # 文章
         for j, s in enumerate(d):  # 句子
-            document[i, j, :s.size(0)].copy_(s)
-            document_mask[i, j, :s.size(0)].fill_(0)  # 0 for real
+            senten_len = words_mask[i][j].eq(0).long().sum(0)[0]
+            document[i, j, :senten_len].copy_(s[:senten_len])
+            document_mask[i, j, :senten_len].fill_(0)  # 0 for real
             if features is not None:
                 features[i, j, :s.size(0), :].copy_(words_features[i][j])
 
     document = Variable(document).cuda() if USE_CUDA else Variable(document)
     document_mask = Variable(document_mask).cuda() if USE_CUDA else Variable(document_mask)
     features = Variable(features).cuda() if USE_CUDA else Variable(features)
-    # fines = Variable(fines).cuda() if USE_CUDA else  Variable(fines)
-    clauses = Variable(clauses).cuda() if USE_CUDA else Variable(clauses)
-    return document.long(), document_mask, features, fines, clauses
+    fines = Variable(LongTensor(fines)).cuda() if USE_CUDA else Variable(LongTensor(fines))
+    # clauses = Variable(clauses).cuda() if USE_CUDA else Variable(clauses)
+    return document.long(), document_mask, features, sentences_count, clauses, fines
 
 
 def vectorize(data, model):
@@ -329,11 +360,10 @@ def vectorize(data, model):
         features = None
 
     document = torch.zeros(sens_len, max(seq_len)).long()  # 单个样例 sen_num * sen_len, 不用段落，直接句子然后文章
+    document_mask = torch.ones(sens_len, max(seq_len)).byte()  # 单个样例 sen_num * sen_len, 不用段落，直接句子然后文章
     for i, w in enumerate(data['words']):
-        try:
-            document[i, :len(w)].copy_(torch.from_numpy(np.asarray(w)))
-        except:
-            print(data['words'])
+        document[i, :len(w)].copy_(torch.from_numpy(np.asarray(w)))
+        document_mask[i, :len(w)].fill_(0)  # 0 for pad , 1 for true
 
     target_tags = torch.zeros(1, len(data['clauses']))
     # for i, t in data['clausea']:
@@ -363,7 +393,7 @@ def vectorize(data, model):
         for i, d in enumerate(data['poss']):
             for j, w in enumerate(d):
                 features[i][j][feature_dict['tf']] = counter[w.lower()] * 1.0 / l
-    return document.long(), features, target_tags, classify
+    return document.long(), features, document_mask, target_tags, classify
 
 
 def build_feature_dict(args, examples):

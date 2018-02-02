@@ -5,6 +5,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import sys
+from torch.autograd import Variable
 
 sys.path.append('..')
 USE_CUDA = torch.cuda.is_available()
@@ -19,7 +20,7 @@ class StackRnn(nn.Module):
     Apply for paragraph representation. sentence -> paragraph to hidden size
     '''
 
-    def __init__(self, input_size, hidden_size, output_size, words_size, feature_size, bidirection=True,
+    def __init__(self, input_size, hidden_size, output_size, words_size, feature_size, tags_len, bidirection=True,
                  number_layers=3,
                  dropout_rate=0.5,
                  rnn_type=nn.LSTM):
@@ -28,6 +29,7 @@ class StackRnn(nn.Module):
         self.hidden_size = hidden_size
         self.output_size = output_size
         self.bidirection = bidirection
+        self.tags_len = tags_len
         self.feature_size = feature_size
         self.rnn_type = rnn_type
         self.number_layers = number_layers
@@ -36,11 +38,15 @@ class StackRnn(nn.Module):
         self.embedding = nn.Embedding(words_size, hidden_size)
         self.rnns = nn.ModuleList()
 
+        self.sel_attn = LinearSelfAttn(hidden_size * 2)
+
         for i in range(self.number_layers):
             in_size = input_size + feature_size if i == 0 else 2 * hidden_size
             self.rnns.append(
                 self.rnn_type(in_size, hidden_size=hidden_size, num_layers=1, bidirectional=bidirection))
         self.fc = nn.Linear(hidden_size * 2, output_size)
+
+        self.fc2 = nn.Linear(hidden_size * 2, tags_len)
 
     def init_weight(self):
         # nn.init.xavier_uniform(self.embedding.state_dict()['weight'])
@@ -72,8 +78,6 @@ class StackRnn(nn.Module):
         for i, para in enumerate(x):
             para_emd = self.embedding(para)  # para_len(num_sentence) * seq_len * hidden_size
 
-            # 改为Dictionary，不然embedding(0)会报错
-
             sen_represen = []
             # pack one sentence
             for j, sen in enumerate(para_emd):
@@ -98,3 +102,194 @@ class StackRnn(nn.Module):
                             dim=0)  # batch * output_size
 
         return out
+
+
+class AvgRnn(nn.Module):
+    '''
+    Apply for paragraph representation. sentence -> paragraph to hidden size
+    '''
+
+    def __init__(self, input_size, hidden_size, output_size, words_size, feature_size, tags_len, bidirection=True,
+                 number_layers=1,
+                 dropout_rate=0.5,
+                 rnn_type=nn.LSTM):
+        super(AvgRnn, self).__init__()
+        self.input_size = input_size
+        self.hidden_size = hidden_size
+        self.output_size = output_size
+        self.bidirection = bidirection
+        self.tags_len = tags_len
+        self.feature_size = feature_size
+        self.rnn_type = rnn_type
+        self.number_layers = number_layers
+        self.dropout_rate = dropout_rate
+
+        self.embedding = nn.Embedding(words_size, hidden_size)
+
+        self.sel_attn_sen = nn.Linear(hidden_size, hidden_size)  # mend
+        self.sel_attn_sen_v = nn.Parameter(FloatTensor(hidden_size, 1))
+        self.rnn = self.rnn_type(input_size + feature_size, hidden_size, num_layers=number_layers,
+                                 bidirectional=bidirection)
+
+        bidre = 2 if bidirection else 1
+
+        self.bn_rnn = nn.BatchNorm1d(hidden_size * self.number_layers * bidre)
+
+        self.sel_attn_para = LinearSelfAttn(hidden_size * self.number_layers * bidre)
+
+        self.fc = nn.Linear(hidden_size * self.number_layers * bidre, 128)
+        self.bn = nn.BatchNorm1d(128)
+
+        self.fc2 = nn.Linear(128, output_size)
+
+    def init_weight(self, args):
+        if args.finetune:
+            nn.init.xavier_uniform(self.embedding.state_dict()['weight'])
+        for name, param in self.rnn.state_dict().items():
+            if 'weight' in name: nn.init.xavier_normal(param)
+
+        nn.init.xavier_normal(self.sel_attn_sen_v)
+        nn.init.xavier_normal(self.sel_attn_sen.state_dict()['weight'])
+
+        nn.init.xavier_normal(self.fc.state_dict()['weight'])
+        self.fc.bias.data.fill_(0)
+
+        nn.init.xavier_normal(self.fc2.state_dict()['weight'])
+        self.fc2.bias.data.fill_(0)
+
+    def forward(self, x, x_mask, x_feature, sentences_len, clause, cls):
+        '''
+        这里第一版2018年02月01日12:56:55
+        建议将篇章分成句子，句子里在分词，那么这里就应该表示为：
+            B * para_len(num_sentence) * seq_len
+        然后对一个Batch进行单独的:
+            1. encoding
+            2. Avg emb(dropout): 句子表示->篇章表示
+            3. rnn
+            3. FC (预想这里在第二版换成RL，做成多决策的RL)
+        x: list , contain multi paragraph. batch first
+        x_mask: data mask : batch * seq_len_max
+        :param x:
+        :param x_mask:
+        :return:
+        '''
+
+        batch_size = x.size(0)
+
+        paragraph_representation = []  # will be (batch * para_hidden)
+
+        max_sen_len = max(sentences_len)
+
+        for i, para in enumerate(x):
+            para_emd = self.embedding(para)  # para_len(num_sentence) * seq_len * hidden_size
+
+            sen_represen = []
+            # pack one sentence
+
+            for j, sen in enumerate(para_emd):
+                sen_len = x_mask[i][j].eq(0).long().sum(0).data[0]  # 0 for origin, 1 for pad
+                if sen_len == 0:
+                    continue
+
+                att_words_score = torch.mm(F.relu(self.sel_attn_sen(sen)), self.sel_attn_sen_v)
+                # att_words_score = F.softmax(att_words_score, 0)
+                sen = sen * att_words_score
+                sen = torch.unsqueeze(sen[:sen_len], 0)  # (1 * seq_len * hidden_size)
+                # # add feature to sen
+                sen_feature = torch.unsqueeze(x_feature[i, j, :sen_len], 0)
+
+                sen = torch.cat([sen, sen_feature], 2)
+                sen_represen.append(sen.sum(1))
+
+            if max_sen_len - len(sen_represen) > 0:
+                for i in range(max_sen_len - len(sen_represen)):
+                    sen_represen.append(Variable(FloatTensor(1, self.feature_size + self.hidden_size).float().fill_(0)))
+
+            paragraph_representation.append(
+                torch.cat(sen_represen, 0).view(-1, 1, self.hidden_size + self.feature_size))  # 拿到篇章的表示
+
+        packed = torch.nn.utils.rnn.pack_padded_sequence(torch.cat(paragraph_representation, 1), sentences_len)
+
+        paragraph_output, paragraph_hidden = self.rnn(
+            packed)  # F.log_softmax(self.fc(torch.nn.utils.rnn.pad_packed_sequence(self.rnn(packed)[0])[0]))
+        # paragraph_output, paragraph_len = torch.nn.utils.rnn.pad_packed_sequence(paragraph_output)
+
+        paragraph_hidden = paragraph_hidden[0].view(batch_size, -1)
+
+        # paragraph_hidden = self.bn_rnn(paragraph_hidden)
+        paragraph_output = F.relu(self.bn(self.fc(paragraph_hidden)))
+
+        paragraph_output = F.relu(self.fc2(paragraph_output))
+
+        out = F.log_softmax(paragraph_output, dim=0)  # batch * output_size
+        return out
+
+
+class LinearSelfAttn(nn.Module):
+    """Self attention over a sequence:
+
+    * o_i = softmax(Wx_i) for x_i in X.
+    """
+
+    def __init__(self, input_size):
+        super(LinearSelfAttn, self).__init__()
+        self.input_size = input_size
+        self.linear_attn = nn.Linear(input_size, 1)
+
+    def forward(self, x, x_mask):
+        """
+        :param x: batch * len * hdim
+        :param x_mask: batch * len (0 for true, 1 for pad)
+        :return:
+         alpha: batch * len
+        """
+        x_flat = x.view(-1, x.size(-1))
+        x_score = self.linear_attn(x_flat).view(x.size(0), x.size(1))
+        x_score.data.masked_fill_(x_mask.data,
+                                  -float(
+                                      'inf'))  # why fill inf? for softmax, to make alpha to 0 because exp(-inf) almost 0
+        alpha = F.softmax(x_score)
+        return alpha
+
+
+"""Cannot use now"""
+
+
+class Gen(nn.Module):
+
+    def __init__(self, input_size, hidden_size, output_size):
+        super(Gen, self).__init__()
+        self.input_size = input_size
+        self.hidden_size = hidden_size
+        self.output_size = output_size
+
+        self.gen = nn.Sequential(
+            nn.LSTM(self.input_size, self.hidden_size, num_layers=1, bidirectional=True),
+            nn.BatchNorm1d(self.hidden_size * 2),
+            nn.ReLU(True),  # modify the variable immediate
+            nn.Dropout(0.3),  # 防止学到过多的噪音
+            nn.Linear(2 * self.hidden_size, self.output_size)
+        )
+
+        self.Dis = nn.Sequential(
+            nn.LSTM(self.output_size, self.hidden_size, bidirectional=True),
+            nn.BatchNorm1d(self.hidden_size * 2),
+            nn.ReLU(True),
+            nn.Linear(self.hidden_size * 2, 1),
+            nn.Sigmoid()
+        )
+
+        def forward(self, input):
+            return self.gen(input)
+
+
+def weighted_avg(x, weights):
+    """Return a weighted average of x (a sequence of vectors).
+
+    Args:
+        x: batch * len * hdim
+        weights: batch * len, sum(dim = 1) = 1
+    Output:
+        x_avg: batch * hdim
+    """
+    return weights.unsqueeze(1).bmm(x).squeeze(1)

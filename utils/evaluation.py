@@ -23,6 +23,8 @@ class Evaluate():
         """
         if torch.is_tensor(answers):
             answers = answers.numpy()
+        if torch.is_tensor(predicts):
+            predicts = predicts.numpy()
         correct = sum([1 if predicts[i] == con else 0 for i, con in enumerate(answers)])
 
         return (correct * 1.0) / len(predicts)

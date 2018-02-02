@@ -3,18 +3,21 @@
 
 import logging
 import sys
+
 sys.path.append('..')
 import torch
 import torch.nn as nn
-from models.layers import StackRnn
+from models.layers import *
 from torch.nn import NLLLoss
 from torch.nn import CrossEntropyLoss
 from torch.optim import Adam
+from torch.optim import SGD
 import numpy as np
+import copy
 
 logger = logging.getLogger(__file__)
 logger.setLevel(logging.INFO)
-fmt = logging.Formatter('%(asctime)s: [ %(message)s ]', '%m/%d/%Y %I:%M:%S %p')
+fmt = logging.Formatter('%(filename)s %(asctime)s: [ %(message)s ]', '%m/%d/%Y %I:%M:%S %p')
 console = logging.StreamHandler()
 console.setFormatter(fmt)
 logger.addHandler(console)
@@ -57,15 +60,16 @@ class ReaderModel():
         self.updates = 0
         self.words_num = words_size
 
-        self.network = StackRnn(input_size, hidden_size, output_size, words_size, feature_size, bidirection=bidirection,
-                                number_layers=number_layers,
-                                dropout_rate=dropout_rate,
-                                rnn_type=rnn_type)
+        self.network = AvgRnn(input_size, hidden_size, output_size, words_size, feature_size, tags_len,
+                              bidirection=bidirection,
+                              number_layers=number_layers,
+                              dropout_rate=dropout_rate,
+                              rnn_type=rnn_type)
         if USE_CUDA:
             self.network.cuda()
 
     def init_optim(self, lr1, lr2=None, weight_decay=0):
-        self.network.init_weight()
+        self.network.init_weight(self.args)
         if not self.optimizer:
             ignore_param = list(map(id, self.network.embedding.parameters()))
             base_param = filter(lambda x: id(x) not in ignore_param, self.network.parameters())
@@ -74,6 +78,13 @@ class ReaderModel():
                               {'params': self.network.embedding.parameters(), 'lr': lr2}])
             self.optimizer = optimizer
         logger.info('Initiate Optim Over...')
+
+    def quick_load_embed(self, embed_ndarray):
+        logger.info(
+            'Load the embedding %d words %d dimension per word' % (embed_ndarray.shape[0], embed_ndarray.shape[1]))
+        embedding = self.network.embedding.weight.data
+        embedding = torch.from_numpy(embed_ndarray)
+        logger.info('Load the embedding over..')
 
     def load_embeddings(self, words, embedding_file):
         """Load pretrained embeddings for a given list of words, if they exist.
@@ -133,7 +144,7 @@ class ReaderModel():
         score = self.network(*ex)
 
         # Compute loss and accuracies of the label
-        loss = self.loss_fun(score, ex[4])
+        loss = self.loss_fun(score, ex[5])
         # Compute loss of the classify
 
         # Clear gradients and run backward
@@ -152,17 +163,17 @@ class ReaderModel():
         # Reset any partially fixed parameters (e.g. rare words)
         # self.reset_parameters()
 
-        return loss.data[0], ex[0].size(0)
+        logger.info('Get Loss %.2f' % loss.data[0])
 
+        return loss.data[0], ex[0].size(0)
 
     def predict(self, ex):
 
-        self.network.eval() # 测试模式
+        self.network.eval()  # 测试模式
 
         cls = self.network(*ex)
 
         return np.argmax(cls.data.cpu().numpy(), 1)
-
 
     def checkpoint(self, filename, epoch):
         params = {
@@ -177,3 +188,66 @@ class ReaderModel():
             torch.save(params, filename)
         except BaseException:
             logger.warning('WARN: Saving failed... continuing anyway.')
+
+    # --------------------------------------------------------------------------
+    # Saving and loading
+    # --------------------------------------------------------------------------
+
+    def save(self, filename):
+        state_dict = copy.copy(self.network.state_dict())
+        if 'fixed_embedding' in state_dict:
+            state_dict.pop('fixed_embedding')
+        params = {
+            'state_dict': state_dict,
+            'words_dict': self.words_dict,
+            'feature_dict': self.feature_dict,
+            'args': self.args,
+        }
+        try:
+            torch.save(params, filename)
+        except BaseException:
+            logger.warning('WARN: Saving failed... continuing anyway.')
+
+    def checkpoint(self, filename, epoch):
+        params = {
+            'state_dict': self.network.state_dict(),
+            'word_dict': self.words_dict,
+            'feature_dict': self.feature_dict,
+            'args': self.args,
+            'epoch': epoch,
+            'optimizer': self.optimizer.state_dict(),
+        }
+        try:
+            torch.save(params, filename)
+        except BaseException:
+            logger.warning('WARN: Saving failed... continuing anyway.')
+
+    # @staticmethod
+    # def load(filename, new_args=None, normalize=True):
+    #     logger.info('Loading model %s' % filename)
+    #     saved_params = torch.load(
+    #         filename, map_location=lambda storage, loc: storage
+    #     )
+    #     word_dict = saved_params['word_dict']
+    #     feature_dict = saved_params['feature_dict']
+    #     state_dict = saved_params['state_dict']
+    #     args = saved_params['args']
+    #     if new_args:
+    #         args = override_model_args(args, new_args)
+    #     return DocReader(args, word_dict, feature_dict, state_dict, normalize)
+    #
+    # @staticmethod
+    # def load_checkpoint(filename, normalize=True):
+    #     logger.info('Loading model %s' % filename)
+    #     saved_params = torch.load(
+    #         filename, map_location=lambda storage, loc: storage
+    #     )
+    #     word_dict = saved_params['word_dict']
+    #     feature_dict = saved_params['feature_dict']
+    #     state_dict = saved_params['state_dict']
+    #     epoch = saved_params['epoch']
+    #     optimizer = saved_params['optimizer']
+    #     args = saved_params['args']
+    #     model = DocReader(args, word_dict, feature_dict, state_dict, normalize)
+    #     model.init_optimizer(optimizer)
+    #     return model, epoch

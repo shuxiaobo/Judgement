@@ -19,7 +19,7 @@ from utils.evaluation import Evaluate
 
 logger = logging.getLogger(__file__)
 logger.setLevel(logging.INFO)
-fmt = logging.Formatter('%(asctime)s: [ %(message)s ]', '%m/%d/%Y %I:%M:%S %p')
+fmt = logging.Formatter('%(filename)s %(asctime)s: [ %(message)s ]', '%m/%d/%Y %I:%M:%S %p')
 console = logging.StreamHandler()
 console.setFormatter(fmt)
 logger.addHandler(console)
@@ -30,8 +30,8 @@ feature_size = 49
 output_size = 8
 class_size = 452
 bidirection = True
-number_layers = 3
-dropout_rate = 0.5
+number_layers = 1
+dropout_rate = 0.2
 lr = 0.005
 batch_size = 32
 train_file = '../data/precessed/pos_ner_content.txt'
@@ -48,9 +48,9 @@ ByteTensor = torch.cuda.ByteTensor if USE_CUDA else torch.ByteTensor
 
 def init_model(words_dict, feature_dict, args):
     logger.info('Initiate Model...')
-    model = ReaderModel(input_size, hidden_size, output_size, feature_size, len(words_dict), words_dict, TAGS_LEN,
+    model = ReaderModel(input_size, hidden_size, output_size, len(feature_dict), len(words_dict), words_dict, TAGS_LEN,
                         CLASS_LEN, feature_dict=feature_dict,
-                        bidirection=True, number_layers=2,
+                        bidirection=True, number_layers=number_layers,
                         dropout_rate=dropout_rate,
                         rnn_type=nn.LSTM, args=args)
     model.init_optim(lr1=lr)
@@ -72,7 +72,6 @@ def train(args, data_loader, model, global_stats):
                         'loss = %.2f | elapsed time = %.2f (s)' %
                         (train_loss.avg, global_stats['timer'].time()))
             train_loss.reset()
-    print(train_loss.avg)
     logger.info('train: Epoch %d done. Time for epoch = %.2f (s)' %
                 (global_stats['epoch'], epoch_time.time()))
 
@@ -84,17 +83,18 @@ def train(args, data_loader, model, global_stats):
 
 def make_dataset(data, model):
     rnn_dataset = RnnDataSet(data, model)
-    data_loader = DataLoader(rnn_dataset, batch_size=32, shuffle=False, collate_fn=util.collate_batch, pin_memory=False,
-                             drop_last=False)
+    data_loader = DataLoader(rnn_dataset, batch_size=batch_size, shuffle=True, collate_fn=util.collate_batch,
+                             pin_memory=False,
+                             drop_last=True)
     return data_loader
 
 
 def main(args):
     # data, word2ids = util.load_train_data(train_file, word2vec_file)
-    data, word2ids = util.load_data()
+    data, word2ids, embed_arr = util.load_data()
     feature_dict = util.build_feature_dict(args, data)
     model = init_model(words_dict=word2ids, feature_dict=feature_dict, args=args)
-    model.load_embeddings(word2ids, embedding_file=word2vec_file)
+    # model.quick_load_embed(embed_arr)
     data_loader = make_dataset(data, model)
 
     start_epoch = 0
@@ -128,9 +128,9 @@ def evaluate(model, data_loader, global_stats, mode='train'):
     for ex in data_loader:
         batch_size = ex[0].size(0)
         pred_s = model.predict(ex)
-        answer = ex[4]
+        answer = ex[5]
         # We get metrics for independent start/end and joint start/end
-        start_acc.update(Evaluate.accuracies(pred_s, answer), 1)
+        start_acc.update(Evaluate.accuracies(pred_s, answer.cpu().data.numpy()), 1)
 
         # If getting train accuracies, sample max 10k
         examples += batch_size
@@ -143,7 +143,7 @@ def evaluate(model, data_loader, global_stats, mode='train'):
                 (examples) +
                 'valid time = %.2f (s)' % eval_time.time())
 
-    return {'acc': start_acc}
+    return {'acc': start_acc.avg}
 
 
 if __name__ == '__main__':
@@ -187,6 +187,8 @@ if __name__ == '__main__':
     runtime.add_argument('--checkpoint', type=bool, default=True,
                          help='checkpoint')
     runtime.add_argument('--model-file', type=str, default='check' + str(time.time().is_integer()) + '.model',
+                         help='Model file save path')
+    runtime.add_argument('--finetune', type=bool, default=False,
                          help='Model file save path')
 
     # General
