@@ -124,7 +124,7 @@ def load_train_data(filename, word2vec_file):
     '''
     logger.info('Load data from file %s ...' % filename)
     word2vec = gensim.models.KeyedVectors.load_word2vec_format(fname=word2vec_file, )
-    words2index = {k: v for v, k in enumerate(word2vec.index2word)}
+    words2index = {k: v + 1 for v, k in enumerate(word2vec.index2word)}
     data = []
     with open(filename, encoding='utf-8', mode='r') as f:
         wrong_count = 0
@@ -142,7 +142,9 @@ def load_train_data(filename, word2vec_file):
             line_count += 1
             for s in sen:
                 try:
-                    w.append([words2index[w.split(':::')[0]] for w in s.split('###')])
+                    w.append(
+                        [words2index[w.split(':::')[0]] if words2index.get(w.split(':::')[0]) is not None else 0 for w
+                         in s.split('###')])
                     n.append([w.split(':::')[1] for w in s.split(' ')])
                     p.append([w.split(':::')[2] for w in s.split(' ')])
                     wrong = False
@@ -175,21 +177,6 @@ def load_data(content_only='../data/processed/content_only.txt',
               clauses_content='../data/processed/clauses_content.txt',
               fines_content='../data/processed/fines_content.txt', ):
     logger.info('Load data from files ...')
-    # if not os.path.isfile('../data/processed/embed.bin'):
-    #     logger.info('Load word2vec from model...')
-    #     word2vec = gensim.models.KeyedVectors.load_word2vec_format(fname=word2vec_file, )
-    #     words2index = {k: v + 1 for v, k in enumerate(word2vec.index2word)}
-    #     words2index['<Unknow>'] = 0
-    #     embed_arr = word2vec.syn0
-    #     with open('../data/processed/embed.bin', mode='bw+') as f:
-    #         pickle.dump({'words2index': words2index, 'embed_arr': embed_arr}, f)
-    #     logger.info('Save the word2vec to file data/processed/embed.bin')
-    # else:
-    #     logger.info('Load word2vec from file...')
-    #     with open('../data/processed/embed.bin', 'rb') as f:
-    #         da = pickle.load(f)
-    #     words2index = da['words2index']
-    #     embed_arr = da['embed_arr']
     word2vec = gensim.models.KeyedVectors.load_word2vec_format(fname=word2vec_file, )
     words2index = {k: v + 1 for v, k in enumerate(word2vec.index2word)}
     words2index['<Unknow>'] = 0
@@ -314,6 +301,7 @@ def collate_batch(batch):
 
     max_seq_len = max(lengths)
     max_sen_len = max(sentences_count)
+    # max_sen_len = 30
 
     document = torch.LongTensor(batch_size, max_sen_len, max_seq_len).zero_()
     document_mask = torch.ByteTensor(batch_size, max_sen_len, max_seq_len).fill_(1)
@@ -321,9 +309,11 @@ def collate_batch(batch):
         features = torch.FloatTensor(batch_size, max_sen_len, max_seq_len, words_features[0].size(2)).zero_()
     else:
         features = None
-
-    for i, d in enumerate(words):  # 文章
-        for j, s in enumerate(d):  # 句子
+    for i, d in enumerate(words):
+        for j in range(max_sen_len):  # 句子
+            if j >= len(d):
+                break
+            s = d[j]
             senten_len = words_mask[i][j].eq(0).long().sum(0)[0]
             document[i, j, :senten_len].copy_(s[:senten_len])
             document_mask[i, j, :senten_len].fill_(0)  # 0 for real

@@ -1,4 +1,9 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
+# Created by ShaneSue on 29/03/2018
+
+
+#!/usr/bin/env python
 # -*- coding: UTF-8 -*-
 
 import argparse
@@ -12,7 +17,7 @@ from torch.utils.data import DataLoader
 import torch
 import time
 
-from models import ReaderModel
+from models import CnnRnnModel
 from utils import util
 from utils.dataset import RnnDataSet
 from utils.evaluation import Evaluate
@@ -31,7 +36,7 @@ output_size = 8
 class_size = 452
 bidirection = True
 number_layers = 1
-dropout_rate = 0.4
+dropout_rate = 0.2
 lr = 0.005
 batch_size = 32
 train_file = '../data/precessed/pos_ner_content.txt'
@@ -48,13 +53,12 @@ ByteTensor = torch.cuda.ByteTensor if USE_CUDA else torch.ByteTensor
 
 def init_model(words_dict, feature_dict, args):
     logger.info('Initiate Model...')
-    model = ReaderModel(input_size, hidden_size, output_size, len(feature_dict), len(words_dict), words_dict, TAGS_LEN,
+    model = CnnRnnModel(input_size, hidden_size, output_size, len(feature_dict), len(words_dict), words_dict, TAGS_LEN,
                         CLASS_LEN, feature_dict=feature_dict,
                         bidirection=True, number_layers=number_layers,
                         dropout_rate=dropout_rate,
                         rnn_type=nn.LSTM, args=args)
     model.init_optim(lr1=lr)
-    model.network.init_hidden(batch_size=batch_size, sen_len=30)
     return model
 
 
@@ -63,11 +67,9 @@ def train(args, data_loader, model, global_stats):
     # Initialize meters + timers
     train_loss = util.AverageMeter()
     epoch_time = util.Timer()
-    # Run one epoch\
-    hidden = model.network.init_hidden(batch_size=batch_size, sen_len=30)
+    # Run one epoch
     for idx, ex in enumerate(data_loader):
-        loss ,iter, hidden = model.update(ex, hidden)
-        train_loss.update(loss, iter)  # run on one batch
+        train_loss.update(*model.update(ex))  # run on one batch
 
         if idx % args.display_iter == 0:
             logger.info('train: Epoch = %d | iter = %d/%d | ' %
@@ -97,7 +99,7 @@ def main(args):
     data, word2ids, embed_arr = util.load_data()
     feature_dict = util.build_feature_dict(args, data)
     model = init_model(words_dict=word2ids, feature_dict=feature_dict, args=args)
-    model.quick_load_embed(embed_arr)
+    # model.quick_load_embed(embed_arr)
     data_loader = make_dataset(data, model)
 
     start_epoch = 0

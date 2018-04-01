@@ -10,6 +10,7 @@ import sys
 sys.path.append('..')
 from .model import ReaderModel
 from .layers import StackRnn
+from .model_0330 import CnnRnnModel
 
 USE_CUDA = torch.cuda.is_available()
 

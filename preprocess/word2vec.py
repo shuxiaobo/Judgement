@@ -71,13 +71,13 @@ def tokenize(text):
 #                             flag += 1
 
 train_file = open(filename, encoding='utf-8')
-content_only_file = open(content_only, encoding='utf-8', mode='w+')
-pos_file = open(pos_content, encoding='utf-8', mode='w+')
-ner_file = open(ner_content, encoding='utf-8', mode='w+')
-clauses_file = open(clauses_content, encoding='utf-8', mode='w+')
-fines_file = open(fines_content, encoding='utf-8', mode='w+')
+content_only_file = open(content_only, encoding='utf-8', mode='r')
+pos_file = open(pos_content, encoding='utf-8', mode='r')
+ner_file = open(ner_content, encoding='utf-8', mode='r')
+clauses_file = open(clauses_content, encoding='utf-8', mode='r')
+fines_file = open(fines_content, encoding='utf-8', mode='r')
 
-pos_ner_file = open(pos_ner_content, encoding='utf-8', mode='w+')
+pos_ner_file = open(pos_ner_content, encoding='utf-8', mode='r')
 
 
 def assign():
@@ -105,7 +105,6 @@ def assign():
     fines_file.close()
     return
 
-
 def segment(line):
     sen = line.strip().split('\t')
     if len(sen[1]) > 5 and len(sen[1]) < 3000:
@@ -131,12 +130,12 @@ def pair_segment(line):
 
 
 if __name__ == '__main__':
-    assign()
-
+    # assign()
     # tokenize first
-    model = Word2Vec(LineSentence(content_only), size=128, window=5, min_count=0,
+    model = Word2Vec(LineSentence(content_only), size=128, window=5, min_count=5,
                      workers=multiprocessing.cpu_count())
+
     # trim unneeded model memory = use(much) less RAM
     # model.init_sims(replace=True)
     model.save(model_file)
-    model.wv.save_word2vec_format(word2vec_file, binary=False)
+    model.wv.save_word2vec_format(word2vec_file+'.min', binary=False)

@@ -1,14 +1,13 @@
 #!/usr/bin/env python
-# -*- coding: UTF-8 -*-
+# -*- coding: utf-8 -*-
+# Created by ShaneSue on 29/03/2018
+
 
 import logging
 import sys
 
 sys.path.append('..')
-import torch
-import torch.nn as nn
 from models.layers import *
-from torch.nn import NLLLoss
 from torch.nn import CrossEntropyLoss
 from torch.optim import Adam
 from torch.optim import SGD
@@ -29,7 +28,7 @@ LongTensor = torch.cuda.LongTensor if USE_CUDA else torch.LongTensor
 ByteTensor = torch.cuda.ByteTensor if USE_CUDA else torch.ByteTensor
 
 
-class ReaderModel():
+class CnnRnnModel():
     def __init__(self, input_size, hidden_size, output_size, feature_size, words_size, words_dict, tags_len, class_len,
                  feature_dict,
                  bidirection=True, number_layers=2, dropout_rate=0.5, rnn_type=nn.LSTM, args=None):
@@ -60,22 +59,26 @@ class ReaderModel():
         self.updates = 0
         self.words_num = words_size
 
-        self.network = AvgRnnNew(input_size, hidden_size, output_size, words_size, feature_size, tags_len,
-                              bidirection=bidirection,
-                              number_layers=number_layers,
-                              dropout_rate=dropout_rate,
-                              rnn_type=rnn_type)
+        kermel_size = [[5, 5], [5, 5], [5, 5]]
+        pool_size = [[2, 2], [2, 2], [2, 2]]
+        channel_sizes = [input_size, 256, input_size, 128]
+
+        self.network = Cnn_rnn(words_size, input_size, channel_sizes, kermel_size, pool_size, dropout_rate, hidden_size,
+                               output_size,
+                               bidirection=bidirection,
+                               number_layers=number_layers,
+                               rnn_type=rnn_type)
         if USE_CUDA:
             self.network.cuda()
 
     def init_optim(self, lr1, lr2=None, weight_decay=0):
         self.network.init_weight(self.args)
         if not self.optimizer:
-            ignore_param = list(map(id, self.network.embedding.parameters()))
+            ignore_param = list(map(id, self.network.cnn.embedding.parameters()))
             base_param = filter(lambda x: id(x) not in ignore_param, self.network.parameters())
             if lr2 is None: lr2 = lr1 * 0.5
             optimizer = Adam([dict(params=base_param, lr=lr1, weight_decay=weight_decay),
-                              {'params': self.network.embedding.parameters(), 'lr': lr2}])
+                              {'params': self.network.cnn.embedding.parameters(), 'lr': lr2}])
             self.optimizer = optimizer
         logger.info('Initiate Optim Over...')
 
@@ -132,7 +135,7 @@ class ReaderModel():
     # Learning
     # --------------------------------------------------------------------------
 
-    def update(self, ex, hidden):
+    def update(self, ex):
         """Forward a batch of examples; step the optimizer to update weights."""
         if not self.optimizer:
             raise RuntimeError('No optimizer set.')
@@ -141,7 +144,7 @@ class ReaderModel():
         self.network.train()
 
         # Run forward
-        score, hidden = self.network(*ex)
+        score = self.network(*ex)
 
         # Compute loss and accuracies of the label
         loss = self.loss_fun(score, ex[5])
@@ -165,13 +168,13 @@ class ReaderModel():
 
         logger.info('Get Loss %.2f' % loss.data[0])
 
-        return loss.data[0], ex[0].size(0), hidden
+        return loss.data[0], ex[0].size(0)
 
     def predict(self, ex):
 
         self.network.eval()  # 测试模式
 
-        cls,_ = self.network(*ex)
+        cls, _ = self.network(*ex)
 
         return np.argmax(cls.data.cpu().numpy(), 1)
 
